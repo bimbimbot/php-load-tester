@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $remaining = $test['total'] - $test['completed'];
-        $batchSize = min(50, $remaining); // Dibatasi menjadi 50 request sekaligus per batch
+        $batchSize = min(30, $remaining); // Dibatasi menjadi 30 request sekaligus per batch
 
         $mh = curl_multi_init();
         $channels = [];
@@ -145,8 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 CURLOPT_URL => $test['url'],
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_CONNECTTIMEOUT => 5,
-                CURLOPT_TIMEOUT => 10,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 15,
                 CURLOPT_HTTPGET => true,
                 CURLOPT_USERAGENT => $randomUserAgent,
                 CURLOPT_PROXY => $test['proxy'],
@@ -154,6 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($test['proxy_user'])) {
                 $curlOptions[CURLOPT_PROXYUSERPWD] = $test['proxy_user'] . ':' . $test['proxy_pass'];
+                $curlOptions[CURLOPT_PROXYAUTH] = CURLAUTH_ANY;
             }
 
             $headers = [
@@ -268,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7 Layer - Concurrent 50</title>
+<title>7 Layer - Concurrent 30</title>
 <style>
 :root {
     --bg: #080b12;
@@ -348,8 +349,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <div class="header">
         <div class="icon">🚀</div>
         <div>
-            <h1>7 Layer (Concurrent 50)</h1>
-            <p>Kirim request 7 Layer dengan batch 50 paralel.</p>
+            <h1>7 Layer (Concurrent 30)</h1>
+            <p>Kirim request 7 Layer dengan batch 30 paralel.</p>
         </div>
     </div>
 
@@ -422,7 +423,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         <div class="stat"><div class="stat-title">Server Error (5xx)</div><div class="stat-value error" id="resServer">0</div></div>
     </div>
 
-    <div class="log" id="log">Tester siap digunakan (50 paralel)...</div>
+    <div class="log" id="log">Tester siap digunakan (30 paralel)...</div>
 </div>
 
 <script>
@@ -505,7 +506,7 @@ startBtn.addEventListener('click', async () => {
     stopBtn.disabled = false;
 
     logBox.innerHTML = '';
-    log('Test 50 paralel dimulai...');
+    log('Test 30 paralel dimulai...');
     runBatchLoop();
 });
 
