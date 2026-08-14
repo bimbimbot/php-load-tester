@@ -37,6 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "Upgrade-Insecure-Requests: 1"
     ];
 
+    // [BARU] Catat waktu mulai eksekusi (dalam detik)
+    $waktu_mulai = microtime(true);
+
     for ($i = 0; $i < $total_requests; $i++) {
         $ch = curl_init();
         
@@ -94,7 +97,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_multi_close($mh);
     }
 
-    echo json_encode(['status' => 'success', 'data' => $results]);
+    // [BARU] Catat waktu selesai dan hitung total durasi
+    $waktu_selesai = microtime(true);
+    $durasi = round($waktu_selesai - $waktu_mulai, 2); // Dibulatkan 2 angka di belakang koma
+
+    // [BARU] Kirimkan durasi ke frontend
+    echo json_encode(['status' => 'success', 'data' => $results, 'waktu_eksekusi' => $durasi]);
     exit;
 }
 ?>
@@ -104,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Tester w/ Proxy</title>
+    <title>API Tester w/ Proxy & Timer</title>
     <style>
         body { font-family: system-ui; background: #f3f4f6; padding: 2rem; }
         .container { max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -117,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .stat { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
         .status-200 { color: #16a34a; font-weight: bold; }
         .status-429 { color: #dc2626; font-weight: bold; }
+        .waktu-box { border-top: 1px dashed #cbd5e1; margin-top: 10px; padding-top: 10px; color: #475569; }
     </style>
 </head>
 <body>
@@ -150,10 +159,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
     <div id="resultBox" class="result-box">
-        <div class="stat"><span>Total Terkirim:</span> <span id="resTotal">0</span></div>
+        <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.1rem;">📊 Hasil Pengujian:</h3>
+        <div class="stat"><span>Total Terkirim:</span> <span id="resTotal" style="font-weight: bold;">0</span></div>
         <div class="stat"><span class="status-200">Masuk / Sukses (200):</span> <span id="res200">0</span></div>
         <div class="stat"><span class="status-429">Kena Rate Limit (429):</span> <span id="res429">0</span></div>
-        <div class="stat"><span>Diblokir Keamanan / Bot (Lainnya):</span> <span id="resLainnya">0</span></div>
+        <div class="stat"><span>Diblokir Keamanan (Lainnya):</span> <span id="resLainnya" style="font-weight: bold;">0</span></div>
+        
+        <!-- [BARU] UI untuk menampilkan waktu -->
+        <div class="stat waktu-box">
+            <span>⏱️ Waktu Eksekusi:</span> 
+            <span id="resWaktu" style="font-weight: bold;">0 detik</span>
+        </div>
     </div>
 </div>
 
@@ -162,21 +178,35 @@ document.getElementById('testerForm').addEventListener('submit', async function(
     e.preventDefault();
     const btn = document.getElementById('btnSubmit');
     const resultBox = document.getElementById('resultBox');
-    btn.disabled = true; btn.innerText = "Mengirim..."; resultBox.style.display = 'none';
+    
+    // Ubah text tombol dan tampilkan pesan loading
+    btn.disabled = true; 
+    btn.innerText = "⏳ Sedang Menembak API..."; 
+    resultBox.style.display = 'none';
 
     try {
         const res = await fetch(window.location.href, { method: 'POST', body: new FormData(this) });
         const json = await res.json();
-        if (json.error) alert(json.error);
-        else {
+        
+        if (json.error) {
+            alert(json.error);
+        } else {
             document.getElementById('resTotal').innerText = json.data.total;
             document.getElementById('res200').innerText = json.data.sukses_200;
             document.getElementById('res429').innerText = json.data.limit_429;
             document.getElementById('resLainnya').innerText = json.data.lainnya;
+            
+            // [BARU] Masukkan data waktu ke UI HTML
+            document.getElementById('resWaktu').innerText = json.waktu_eksekusi + " detik";
+            
             resultBox.style.display = 'block';
         }
-    } catch (err) { alert("Error jaringan/timeout: " + err); } 
-    finally { btn.disabled = false; btn.innerText = "Tembak API!"; }
+    } catch (err) { 
+        alert("Error jaringan/timeout. Mungkin server tujuan tidak merespons atau proxy mati: " + err); 
+    } finally { 
+        btn.disabled = false; 
+        btn.innerText = "Tembak API!"; 
+    }
 });
 </script>
 </body>
