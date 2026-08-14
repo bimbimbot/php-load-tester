@@ -3,17 +3,13 @@
 // BAGIAN BACKEND (LAYER 7 API - RATE LIMITED)
 // ==========================================
 
-// Mulai session untuk mencatat timestamp cooldown backend
 session_start();
-
-// Batasi eksekusi PHP maksimal 120 detik untuk mengakomodasi alur 1000 request/menit
 set_time_limit(120);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     
-    // --- SECURITY CHECK: COOLDOWN DI SISI BACKEND (15 DETIK) ---
-    $cooldown_limit = 15; // Waktu jeda minimal dalam detik
+    $cooldown_limit = 15;
     $current_time = time();
 
     if (isset($_SESSION['last_submit_time'])) {
@@ -27,37 +23,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Catat waktu request berhasil diproses
     $_SESSION['last_submit_time'] = $current_time;
-    // -----------------------------------------------------------
 
     $url = trim($_POST['url'] ?? '');
-    
-    // Ambil data Referrer dan Origin dari input Frontend
     $custom_referrer = trim($_POST['referrer'] ?? '');
     $custom_origin   = trim($_POST['origin'] ?? '');
 
-    // Validasi Total Request (Maksimal 1000 Request)
     $total_requests = (int)($_POST['total_requests'] ?? 1000);
     if ($total_requests < 1) $total_requests = 1;
     if ($total_requests > 1000) $total_requests = 1000;
     
-    // Validasi Concurrent (1 - 40 agar stabil di Railway)
     $concurrent = (int)($_POST['concurrent'] ?? 25); 
     if ($concurrent < 1) $concurrent = 1;
     if ($concurrent > 40) $concurrent = 40;
 
-    // Konfigurasi Proxy
     $proxy = trim($_POST['proxy'] ?? '');
     $proxy_auth = trim($_POST['proxy_auth'] ?? '');
     
-    // 1. Validasi URL Target
     if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
         echo json_encode(['error' => 'URL Endpoint Target tidak valid.']);
         exit;
     }
 
-    // 2. Validasi WAJIB PROXY
     if (empty($proxy)) {
         echo json_encode(['error' => 'Alamat Proxy (IP:Port) wajib diisi untuk simulasi Layer 7!']);
         exit;
@@ -71,10 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'total'       => 0
     ];
 
-    $proxy_error_messages = [];
     $ch_list = [];
 
-    // Header Penyamaran Browser
     $human_headers = [
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -101,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         curl_setopt($ch, CURLOPT_URL, $target_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8); // Timeout lebih agresif agar tidak numpuk
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 6);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
         curl_setopt($ch, CURLOPT_HTTPHEADER, $human_headers);
@@ -165,57 +150,302 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Layer 7 API</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Layer 7 API - Cyber Aesthetic Dashboard</title>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; background: #f3f4f6; padding: 2rem; }
-        .container { max-width: 500px; margin: auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 1rem; }
-        input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { background: #2563eb; color: white; border: none; padding: 10px; width: 100%; font-weight: bold; cursor: pointer; border-radius: 4px; }
-        .result-box { margin-top: 1.5rem; display: none; }
+        :root {
+            --bg-deep: #090d16;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --accent-glow: rgba(99, 102, 241, 0.35);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(14, 165, 233, 0.1) 0%, transparent 40%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-glow);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 2rem;
+        }
+
+        .header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .fire-icon {
+            font-size: 1.75rem;
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.4)); }
+            50% { transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.8)); }
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .row {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .row .form-group {
+            flex: 1;
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+            color: white;
+            border: none;
+            padding: 0.875rem;
+            width: 100%;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+            margin-top: 0.5rem;
+        }
+
+        button:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #334155;
+            box-shadow: none;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .result-box {
+            margin-top: 2rem;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-glass);
+            border-radius: 14px;
+            padding: 1.5rem;
+            display: none;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.5rem;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .val-success { color: #34d399; }
+        .val-limit { color: #f87171; }
     </style>
 </head>
 <body>
+
 <div class="container">
-    <h2>🔥 Layer 7 API</h2>
+    <div class="header">
+        <span class="fire-icon">🔥</span>
+        <h2>Layer 7 API Engine</h2>
+    </div>
+
     <form id="testerForm">
-        <div class="form-group"><label>URL</label><input type="url" name="url" required></div>
-        <div class="form-group"><label>Referrer</label><input type="url" name="referrer" required></div>
-        <div class="form-group"><label>Origin</label><input type="text" name="origin" required></div>
-        <div class="form-group" style="display: flex; gap: 10px;">
-            <div style="flex:1"><label>Total (Max 1k)</label><input type="number" name="total_requests" value="1000" max="1000"></div>
-            <div style="flex:1"><label>Concurrent</label><input type="number" name="concurrent" value="25" max="40"></div>
+        <div class="form-group">
+            <label>URL Endpoint API</label>
+            <input type="url" name="url" placeholder="https://example.com/api" required>
         </div>
-        <div class="form-group"><label>Proxy IP:Port</label><input type="text" name="proxy" required></div>
-        <div class="form-group"><label>Proxy Auth</label><input type="text" name="proxy_auth"></div>
+
+        <div class="form-group">
+            <label>Referrer (Wajib)</label>
+            <input type="url" name="referrer" placeholder="https://example.com/" required>
+        </div>
+
+        <div class="form-group">
+            <label>Origin (Wajib)</label>
+            <input type="text" name="origin" placeholder="https://example.com" required>
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label>Total Request (Max 1k)</label>
+                <input type="number" name="total_requests" value="1000" max="1000" required>
+            </div>
+            <div class="form-group">
+                <label>Concurrent (Max 40)</label>
+                <input type="number" name="concurrent" value="25" max="40" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Proxy (IP:Port)</label>
+            <input type="text" name="proxy" placeholder="123.45.67.89:8080" required>
+        </div>
+
+        <div class="form-group">
+            <label>Proxy Auth (Opsional)</label>
+            <input type="text" name="proxy_auth" placeholder="username:password">
+        </div>
+
         <button type="submit" id="btnSubmit">Tembak Layer 7!</button>
     </form>
+
     <div id="resultBox" class="result-box">
-        <p>Total Terkirim: <span id="resTotal">0</span></p>
-        <p style="color:green">Sukses (200): <span id="res200">0</span></p>
-        <p style="color:red">Limit (429): <span id="res429">0</span></p>
-        <p>Waktu: <span id="resWaktu">0</span> detik</p>
+        <div class="result-title">📊 Hasil Pengujian Sistem</div>
+        <div class="stat-item">
+            <span>Total Terkirim:</span>
+            <span id="resTotal" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Masuk / Sukses (200):</span>
+            <span id="res200" class="stat-value val-success">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Kena Rate Limit (429):</span>
+            <span id="res429" class="stat-value val-limit">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Waktu Eksekusi:</span>
+            <span id="resWaktu" class="stat-value">0 detik</span>
+        </div>
     </div>
 </div>
+
 <script>
 document.getElementById('testerForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const btn = document.getElementById('btnSubmit');
-    btn.disabled = true; btn.innerText = "Processing...";
+    const resultBox = document.getElementById('resultBox');
+    
+    btn.disabled = true; 
+    btn.innerText = "⏳ Sedang Menembak Layer 7...";
+    resultBox.style.display = 'none';
+
     try {
         const res = await fetch(window.location.href, { method: 'POST', body: new FormData(this) });
         const json = await res.json();
-        if (json.error) alert(json.error);
-        else {
+        
+        if (json.error) {
+            alert(json.error);
+        } else {
             document.getElementById('resTotal').innerText = json.data.total;
             document.getElementById('res200').innerText = json.data.sukses_200;
             document.getElementById('res429').innerText = json.data.limit_429;
-            document.getElementById('resWaktu').innerText = json.waktu_eksekusi;
-            document.getElementById('resultBox').style.display = 'block';
+            document.getElementById('resWaktu').innerText = json.waktu_eksekusi + " detik";
+            resultBox.style.display = 'block';
         }
-    } catch(err) { alert("Error: " + err.message); }
-    finally { btn.disabled = false; btn.innerText = "Tembak Layer 7!"; }
+    } catch(err) { 
+        alert("⚠️ Error Jaringan / Timeout: " + err.message); 
+    } finally { 
+        btn.disabled = false; 
+        btn.innerText = "Tembak Layer 7!"; 
+    }
 });
 </script>
+
 </body>
 </html>
