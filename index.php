@@ -21,6 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $proxyPass = trim($_POST['proxy_pass'] ?? '');
         $referer = trim($_POST['referer'] ?? '');
         $origin = trim($_POST['origin'] ?? '');
+        $apiKey = trim($_POST['api_key'] ?? '');
+        $customHeaderKey = trim($_POST['custom_header_key'] ?? '');
+        $customHeaderVal = trim($_POST['custom_header_val'] ?? '');
 
         if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
             echo json_encode(['ok' => false, 'error' => 'URL tidak valid.']);
@@ -42,6 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'proxy_pass' => $proxyPass,
             'referer' => $referer,
             'origin' => $origin,
+            'api_key' => $apiKey,
+            'custom_header_key' => $customHeaderKey,
+            'custom_header_val' => $customHeaderVal,
             'completed' => 0,
             'success' => 0,
             'client_error' => 0,
@@ -125,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $remaining = $test['total'] - $test['completed'];
-        $batchSize = min(25, $remaining); // Dibatasi menjadi 25 request sekaligus per batch
+        $batchSize = min(25, $remaining);
 
         $mh = curl_multi_init();
         $channels = [];
@@ -169,6 +175,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($test['origin'])) {
                 $headers[] = 'Origin: ' . $test['origin'];
             }
+            if (!empty($test['api_key'])) {
+                $headers[] = 'Authorization: Bearer ' . $test['api_key'];
+            }
+            if (!empty($test['custom_header_key']) && !empty($test['custom_header_val'])) {
+                $headers[] = $test['custom_header_key'] . ': ' . $test['custom_header_val'];
+            }
+
             $curlOptions[CURLOPT_HTTPHEADER] = $headers;
 
             curl_setopt_array($ch, $curlOptions);
@@ -392,6 +405,22 @@ button:disabled { opacity: .4; cursor: not-allowed; }
             </div>
         </div>
 
+        <div class="form-group">
+            <label>API Key (Opsional - Bearer Token)</label>
+            <input type="text" id="apiKey" placeholder="Masukkan API Key / Token Anda">
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label>Custom Header Key (Opsional)</label>
+                <input type="text" id="customHeaderKey" placeholder="Cth: X-Custom-Header">
+            </div>
+            <div class="form-group">
+                <label>Custom Header Value (Opsional)</label>
+                <input type="text" id="customHeaderVal" placeholder="Cth: NilaiHeader">
+            </div>
+        </div>
+
         <div class="buttons">
             <button type="button" class="start" id="startBtn">▶ START</button>
             <button type="button" class="pause" id="pauseBtn" disabled>⏸ PAUSE</button>
@@ -488,6 +517,9 @@ startBtn.addEventListener('click', async () => {
     const proxyPass = document.getElementById('proxyPass').value.trim();
     const referer = document.getElementById('referer').value.trim();
     const origin = document.getElementById('origin').value.trim();
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const customHeaderKey = document.getElementById('customHeaderKey').value.trim();
+    const customHeaderVal = document.getElementById('customHeaderVal').value.trim();
 
     if (!url || !proxy) {
         alert('URL dan Proxy wajib diisi!');
@@ -495,7 +527,18 @@ startBtn.addEventListener('click', async () => {
     }
     if (total > 2000) total = 2000;
 
-    const result = await post('start', { url, total_requests: total, proxy, proxy_user: proxyUser, proxy_pass: proxyPass, referer, origin });
+    const result = await post('start', { 
+        url, 
+        total_requests: total, 
+        proxy, 
+        proxy_user: proxyUser, 
+        proxy_pass: proxyPass, 
+        referer, 
+        origin, 
+        api_key: apiKey,
+        custom_header_key: customHeaderKey,
+        custom_header_val: customHeaderVal
+    });
     if (!result.ok) { alert(result.error); return; }
 
     running = true;
