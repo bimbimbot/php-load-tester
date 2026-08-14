@@ -1,9 +1,9 @@
 <?php
 // ==========================================
-// BAGIAN BACKEND (PHP API TESTER)
+// BAGIAN BACKEND (LAYER 7 API LOAD TESTER)
 // ==========================================
 
-// Batasi eksekusi PHP maksimal 30 detik agar tidak membanjiri server
+// Batasi eksekusi PHP maksimal 30 detik agar tidak menggantung/overload
 set_time_limit(30);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -25,22 +25,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $proxy = trim($_POST['proxy'] ?? '');
     $proxy_auth = trim($_POST['proxy_auth'] ?? '');
     
-    // 1. Validasi URL
+    // 1. Validasi URL Target
     if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
-        echo json_encode(['error' => 'URL Endpoint tidak valid.']);
+        echo json_encode(['error' => 'URL Endpoint Target tidak valid.']);
         exit;
     }
 
-    // 2. Validasi WAJIB PROXY
+    // 2. Validasi WAJIB PROXY (Layer 7 Distributed Test)
     if (empty($proxy)) {
-        echo json_encode(['error' => 'Alamat Proxy (IP:Port) wajib diisi!']);
+        echo json_encode(['error' => 'Alamat Proxy (IP:Port) wajib diisi untuk simulasi Layer 7!']);
         exit;
     }
 
     $results = [
         'sukses_200'  => 0, 
         'limit_429'   => 0, 
-        'proxy_error' => 0, // Kena limit/error proxy (407, 502, 504, 0/timeout)
+        'proxy_error' => 0, // Kena limit/error proxy (407 Proxy Auth, 502/504 Bad Gateway, 0/Timeout)
         'lainnya'     => 0, 
         'total'       => 0
     ];
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $proxy_error_messages = [];
     $ch_list = [];
 
-    // Header Penyamaran Browser
+    // Header Penyamaran Browser (Layer 7 HTTP Flood Simulation)
     $human_headers = [
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -69,12 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     for ($i = 0; $i < $total_requests; $i++) {
         $ch = curl_init();
         
-        $target_url = $url . (strpos($url, '?') !== false ? '&' : '?') . 'test_id=' . uniqid();
+        $target_url = $url . (strpos($url, '?') !== false ? '&' : '?') . 'l7_test_id=' . uniqid();
         
         curl_setopt($ch, CURLOPT_URL, $target_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         
-        // Timeout cURL diset 10 detik agar tidak menggantung lama
+        // Timeout cURL diset 10 detik per-request
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
         
@@ -97,9 +97,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $batches = array_chunk($ch_list, $concurrent);
 
     foreach ($batches as $batch) {
-        // Cek jika waktu eksekusi sudah mendekati batas 30 detik
+        // Hentikan proses jika total waktu sudah mendekati 30 detik
         if ((microtime(true) - $waktu_mulai) >= 28.5) {
-            $proxy_error_messages[] = "Eksekusi dihentikan otomatis karena mencapai batas maksimal 30 detik.";
+            $proxy_error_messages[] = "Pengujian dihentikan otomatis karena mencapai batas maksimal 30 detik.";
             break;
         }
 
@@ -127,14 +127,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($http_code == 429) { 
                 $results['limit_429']++; 
             } elseif (in_array($http_code, [0, 407, 502, 503, 504]) || !empty($curl_err)) {
-                // Kena Limit Proxy / Proxy Auth Error / Proxy Dead / Timeout
+                // Error Proxy / Proxy Auth Fail / Proxy Dead / Connection Timeout
                 $results['proxy_error']++;
                 if (!empty($curl_err) && count($proxy_error_messages) < 3) {
-                    $proxy_error_messages[] = "Proxy Error: " . $curl_err;
+                    $proxy_error_messages[] = "Proxy Connection Error: " . $curl_err;
                 } elseif ($http_code == 407) {
-                    $proxy_error_messages[] = "Proxy Auth Failed (407): Username/Password Proxy Salah atau Habis Kuota.";
+                    $proxy_error_messages[] = "Proxy Auth Failed (407): Username/Password Proxy Salah atau Kuota Habis.";
                 } elseif ($http_code == 502 || $http_code == 504) {
-                    $proxy_error_messages[] = "Proxy Gateway Error ($http_code): Proxy tidak merespon / mati.";
+                    $proxy_error_messages[] = "Proxy Gateway Error ($http_code): Server Proxy tidak merespon / offline.";
                 }
             } else { 
                 $results['lainnya']++; 
@@ -170,14 +170,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Proxy API Tester (Max 30s)</title>
+    <title>🔥 Layer 7 API Load Tester (Max 30s)</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; padding: 2rem; color: #1e293b; }
         .container { max-width: 620px; margin: auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
         .form-group { margin-bottom: 1.2rem; }
         label { display: block; margin-bottom: 0.4rem; font-weight: 600; font-size: 0.95rem; }
         input { width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 0.95rem; }
-        input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
         .hint { font-size: 0.8rem; color: #64748b; margin-top: 4px; display: block; }
         button { background: #2563eb; color: white; border: none; padding: 0.85rem; width: 100%; font-weight: bold; font-size: 1rem; cursor: pointer; border-radius: 6px; transition: background 0.2s;}
         button:hover { background: #1d4ed8; }
@@ -195,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 <div class="container">
-    <h2>🚀 Proxy API Tester</h2>
+    <h2>🔥 Layer 7 API Load Tester</h2>
     <form id="testerForm">
         <div class="form-group">
             <label>URL Endpoint API Kamu (InfinityFree)</label>
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-group">
             <label>Proxy (Wajib) - IP:Port</label>
             <input type="text" name="proxy" placeholder="Contoh: 45.38.107.97:6014" required>
-            <span class="hint">Wajib diisi alamat IP & Port Proxy yang aktif.</span>
+            <span class="hint">Wajib diisi IP:Port Proxy aktif untuk pengujian Layer 7.</span>
         </div>
         
         <div class="form-group">
@@ -227,11 +227,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <span class="hint">Kosongkan jika proxy tidak membutuhkan autentikasi login.</span>
         </div>
         
-        <button type="submit" id="btnSubmit">Tembak API!</button>
+        <button type="submit" id="btnSubmit">Tembak Layer 7!</button>
     </form>
 
     <div id="resultBox" class="result-box">
-        <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.05rem;">📊 Hasil Pengujian:</h3>
+        <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.05rem;">📊 Hasil Pengujian Layer 7:</h3>
         <div class="stat"><span>Total Terkirim:</span> <span id="resTotal" style="font-weight: bold;">0</span></div>
         <div class="stat"><span class="status-200">Masuk / Sukses (200):</span> <span id="res200">0</span></div>
         <div class="stat"><span class="status-429">Kena Rate Limit API (429):</span> <span id="res429">0</span></div>
@@ -256,7 +256,7 @@ document.getElementById('testerForm').addEventListener('submit', async function(
     
     // Ubah status tombol & sembunyikan hasil sebelumnya
     btn.disabled = true; 
-    btn.innerText = "⏳ Sedang Menembak API (Max 30s)..."; 
+    btn.innerText = "⏳ Sedang Menembak Layer 7 (Max 30s)..."; 
     resultBox.style.display = 'none';
     alertProxy.style.display = 'none';
 
@@ -287,7 +287,7 @@ document.getElementById('testerForm').addEventListener('submit', async function(
         alert("⚠️ Error Jaringan atau Timeout (>30s): " + err.message); 
     } finally { 
         btn.disabled = false; 
-        btn.innerText = "Tembak API!"; 
+        btn.innerText = "Tembak Layer 7!"; 
     }
 });
 </script>
