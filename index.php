@@ -1,12 +1,11 @@
 <?php
 /*
  * ============================================================
- * SAFE WEB LOAD TESTER
+ * SAFE WEB LOAD TESTER (WITH PROXY, HEADERS, & HUMAN USER-AGENT)
  * START / PAUSE / RESUME / STOP
  * ============================================================
  *
  * Gunakan hanya untuk endpoint yang kamu miliki/berwenang uji.
- * Tidak menggunakan proxy rotation atau flooding burst.
  */
 
 session_start();
@@ -23,6 +22,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $url = trim($_POST['url'] ?? '');
         $total = (int)($_POST['total_requests'] ?? 50);
         $delay = (int)($_POST['delay_ms'] ?? 250);
+        
+        $proxy = trim($_POST['proxy'] ?? '');
+        $proxyUser = trim($_POST['proxy_user'] ?? '');
+        $proxyPass = trim($_POST['proxy_pass'] ?? '');
+        $referer = trim($_POST['referer'] ?? '');
+        $origin = trim($_POST['origin'] ?? '');
 
         if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
             echo json_encode([
@@ -40,6 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'url' => $url,
             'total' => $total,
             'delay' => $delay,
+            'proxy' => $proxy,
+            'proxy_user' => $proxyUser,
+            'proxy_pass' => $proxyPass,
+            'referer' => $referer,
+            'origin' => $origin,
             'completed' => 0,
             'success' => 0,
             'client_error' => 0,
@@ -177,19 +187,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $ch = curl_init();
 
-        curl_setopt_array($ch, [
+        // Kumpulan User-Agent Browser Manusia (Chrome, Firefox, Safari, Edge)
+        $humanUserAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Edge/122.0.2365.66'
+        ];
+        $randomUserAgent = $humanUserAgents[array_rand($humanUserAgents)];
+
+        $curlOptions = [
             CURLOPT_URL => $test['url'],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 10,
             CURLOPT_HTTPGET => true,
-            CURLOPT_USERAGENT => 'Safe-Web-Load-Tester/1.0',
-            CURLOPT_HTTPHEADER => [
-                'Accept: */*',
-                'Cache-Control: no-cache'
-            ]
-        ]);
+            CURLOPT_USERAGENT => $randomUserAgent,
+        ];
+
+        // Konfigurasi Proxy jika diisi
+        if (!empty($test['proxy'])) {
+            $curlOptions[CURLOPT_PROXY] = $test['proxy'];
+            if (!empty($test['proxy_user'])) {
+                $curlOptions[CURLOPT_PROXYUSERPWD] = $test['proxy_user'] . ':' . $test['proxy_pass'];
+            }
+        }
+
+        // Header Kustom Manusiawi
+        $headers = [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Cache-Control: no-cache',
+            'Pragma: no-cache',
+            'Sec-Ch-Ua: "Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            'Sec-Ch-Ua-Mobile: ?0',
+            'Sec-Ch-Ua-Platform: "Windows"',
+            'Sec-Fetch-Dest: document',
+            'Sec-Fetch-Mode: navigate',
+            'Sec-Fetch-Site: cross-site',
+            'Sec-Fetch-User: ?1',
+            'Upgrade-Insecure-Requests: 1'
+        ];
+
+        if (!empty($test['referer'])) {
+            $curlOptions[CURLOPT_REFERER] = $test['referer'];
+        }
+
+        if (!empty($test['origin'])) {
+            $headers[] = 'Origin: ' . $test['origin'];
+        }
+
+        $curlOptions[CURLOPT_HTTPHEADER] = $headers;
+
+        curl_setopt_array($ch, $curlOptions);
 
         curl_exec($ch);
 
@@ -251,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>7 Layer API</title>
+<title>Web Load Tester + Human User-Agent</title>
 
 <style>
 
@@ -622,7 +675,7 @@ button:disabled {
             <h1>Web Load Tester</h1>
 
             <p>
-                Controlled endpoint testing
+                Controlled testing + Human UA, Proxy & Headers
             </p>
         </div>
 
@@ -632,198 +685,91 @@ button:disabled {
     <form id="testerForm">
 
         <div class="form-group">
-
-            <label>
-                URL Endpoint
-            </label>
-
-            <input
-                type="url"
-                id="url"
-                placeholder="https://domain-kamu.com/api/health"
-                required
-            >
-
+            <label>URL Endpoint</label>
+            <input type="url" id="url" placeholder="https://domain-kamu.com/api/health" required>
         </div>
-
 
         <div class="row">
-
             <div class="form-group">
-
-                <label>
-                    Total Request
-                </label>
-
-                <input
-                    type="number"
-                    id="total"
-                    value="50"
-                    min="1"
-                    max="200"
-                    required
-                >
-
+                <label>Total Request</label>
+                <input type="number" id="total" value="50" min="1" max="200" required>
             </div>
-
-
             <div class="form-group">
-
-                <label>
-                    Delay (ms)
-                </label>
-
-                <input
-                    type="number"
-                    id="delay"
-                    value="250"
-                    min="100"
-                    max="5000"
-                    required
-                >
-
+                <label>Delay (ms)</label>
+                <input type="number" id="delay" value="250" min="100" max="5000" required>
             </div>
-
         </div>
 
+        <div class="form-group">
+            <label>Proxy (Opsional - Cth: 123.45.67.89:8080)</label>
+            <input type="text" id="proxy" placeholder="IP:PORT atau host:port">
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label>Proxy Username (Opsional)</label>
+                <input type="text" id="proxyUser" placeholder="Username proxy">
+            </div>
+            <div class="form-group">
+                <label>Proxy Password (Opsional)</label>
+                <input type="password" id="proxyPass" placeholder="Password proxy">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label>Referer Header (Opsional)</label>
+                <input type="url" id="referer" placeholder="https://domain-asal.com">
+            </div>
+            <div class="form-group">
+                <label>Origin Header (Opsional)</label>
+                <input type="url" id="origin" placeholder="https://domain-asal.com">
+            </div>
+        </div>
 
         <div class="buttons">
-
-            <button
-                type="button"
-                class="start"
-                id="startBtn"
-            >
-                ▶ START
-            </button>
-
-            <button
-                type="button"
-                class="pause"
-                id="pauseBtn"
-                disabled
-            >
-                ⏸ PAUSE
-            </button>
-
-            <button
-                type="button"
-                class="stop"
-                id="stopBtn"
-                disabled
-            >
-                ⏹ STOP
-            </button>
-
+            <button type="button" class="start" id="startBtn">▶ START</button>
+            <button type="button" class="pause" id="pauseBtn" disabled>⏸ PAUSE</button>
+            <button type="button" class="stop" id="stopBtn" disabled>⏹ STOP</button>
         </div>
 
     </form>
 
 
     <div class="status">
-
-        <span class="status-label">
-            STATUS
-        </span>
-
-        <span id="statusText">
-            IDLE
-        </span>
-
+        <span class="status-label">STATUS</span>
+        <span id="statusText">IDLE</span>
     </div>
 
 
     <div class="progress-wrap">
-
         <div class="progress-info">
-
-            <span>
-                Progress
-            </span>
-
-            <span id="progressText">
-                0 / 0
-            </span>
-
+            <span>Progress</span>
+            <span id="progressText">0 / 0</span>
         </div>
-
         <div class="progress">
-
-            <div
-                class="progress-bar"
-                id="progressBar"
-            ></div>
-
+            <div class="progress-bar" id="progressBar"></div>
         </div>
-
     </div>
 
 
     <div class="stats">
-
         <div class="stat">
-
-            <div class="stat-title">
-                Total
-            </div>
-
-            <div
-                class="stat-value"
-                id="resTotal"
-            >
-                0
-            </div>
-
+            <div class="stat-title">Total</div>
+            <div class="stat-value" id="resTotal">0</div>
         </div>
-
-
         <div class="stat">
-
-            <div class="stat-title">
-                Success 2xx
-            </div>
-
-            <div
-                class="stat-value success"
-                id="resSuccess"
-            >
-                0
-            </div>
-
+            <div class="stat-title">Success 2xx</div>
+            <div class="stat-value success" id="resSuccess">0</div>
         </div>
-
-
         <div class="stat">
-
-            <div class="stat-title">
-                Client Error 4xx
-            </div>
-
-            <div
-                class="stat-value warning"
-                id="resClient"
-            >
-                0
-            </div>
-
+            <div class="stat-title">Client Error 4xx</div>
+            <div class="stat-value warning" id="resClient">0</div>
         </div>
-
-
         <div class="stat">
-
-            <div class="stat-title">
-                Server Error 5xx
-            </div>
-
-            <div
-                class="stat-value error"
-                id="resServer"
-            >
-                0
-            </div>
-
+            <div class="stat-title">Server Error 5xx</div>
+            <div class="stat-value error" id="resServer">0</div>
         </div>
-
     </div>
 
 
@@ -853,12 +799,6 @@ let stopped = false;
 let isPausedState = false;
 
 
-/*
- * ------------------------------------------------------------
- * Helper POST
- * ------------------------------------------------------------
- */
-
 async function post(action, data = {}) {
     const form = new FormData();
     form.append('action', action);
@@ -880,24 +820,12 @@ async function post(action, data = {}) {
 }
 
 
-/*
- * ------------------------------------------------------------
- * Log
- * ------------------------------------------------------------
- */
-
 function log(message) {
     const time = new Date().toLocaleTimeString();
     logBox.innerHTML += `<div>[${time}] ${message}</div>`;
     logBox.scrollTop = logBox.scrollHeight;
 }
 
-
-/*
- * ------------------------------------------------------------
- * Update UI
- * ------------------------------------------------------------
- */
 
 function updateUI(test) {
     if (!test) return;
@@ -926,16 +854,15 @@ function updateUI(test) {
 }
 
 
-/*
- * ------------------------------------------------------------
- * START
- * ------------------------------------------------------------
- */
-
 startBtn.addEventListener('click', async () => {
     const url = document.getElementById('url').value.trim();
     const total = document.getElementById('total').value;
     const delay = document.getElementById('delay').value;
+    const proxy = document.getElementById('proxy').value.trim();
+    const proxyUser = document.getElementById('proxyUser').value.trim();
+    const proxyPass = document.getElementById('proxyPass').value.trim();
+    const referer = document.getElementById('referer').value.trim();
+    const origin = document.getElementById('origin').value.trim();
 
     if (!url) {
         alert('Masukkan URL endpoint.');
@@ -946,7 +873,12 @@ startBtn.addEventListener('click', async () => {
         const result = await post('start', {
             url: url,
             total_requests: total,
-            delay_ms: delay
+            delay_ms: delay,
+            proxy: proxy,
+            proxy_user: proxyUser,
+            proxy_pass: proxyPass,
+            referer: referer,
+            origin: origin
         });
 
         if (!result.ok) {
@@ -974,16 +906,9 @@ startBtn.addEventListener('click', async () => {
 });
 
 
-/*
- * ------------------------------------------------------------
- * PAUSE / RESUME TOGGLE
- * ------------------------------------------------------------
- */
-
 pauseBtn.addEventListener('click', async () => {
     try {
         if (!isPausedState) {
-            // Aksi Pause
             const result = await post('pause');
             if (result.ok) {
                 running = false;
@@ -993,7 +918,6 @@ pauseBtn.addEventListener('click', async () => {
                 updateUI(result.test);
             }
         } else {
-            // Aksi Resume
             const result = await post('resume');
             if (result.ok) {
                 running = true;
@@ -1009,12 +933,6 @@ pauseBtn.addEventListener('click', async () => {
     }
 });
 
-
-/*
- * ------------------------------------------------------------
- * STOP
- * ------------------------------------------------------------
- */
 
 stopBtn.addEventListener('click', async () => {
     stopped = true;
@@ -1037,12 +955,6 @@ stopBtn.addEventListener('click', async () => {
     isPausedState = false;
 });
 
-
-/*
- * ------------------------------------------------------------
- * LOOP
- * ------------------------------------------------------------
- */
 
 async function runLoop() {
     if (!running || stopped) {
