@@ -1,6 +1,6 @@
 <?php
 // ==========================================
-// BAGIAN BACKEND (LAYER 7 API LOAD TESTER)
+// BAGIAN BACKEND (LAYER 7 API)
 // ==========================================
 
 // Batasi eksekusi PHP maksimal 30 detik agar tidak menggantung/overload
@@ -170,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔥 Layer 7 API Load Tester (Max 30s)</title>
+    <title>🔥 Layer 7 API (Max 30s)</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; padding: 2rem; color: #1e293b; }
         .container { max-width: 620px; margin: auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
@@ -195,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 <div class="container">
-    <h2>🔥 Layer 7 API Load Tester</h2>
+    <h2>🔥 Layer 7 API</h2>
     <form id="testerForm">
         <div class="form-group">
             <label>URL Endpoint API</label>
