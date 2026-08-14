@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================================
- * SAFE WEB LOAD TESTER (MANDATORY PROXY, COOLDOWN, MAX 500 REQ, MAX 2000 MS)
+ * SAFE WEB LOAD TESTER (MANDATORY PROXY, FAST REQUESTS, BATCH COOLDOWN 500)
  * START / PAUSE / RESUME / STOP
  * ============================================================
  *
@@ -20,8 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
      */
     if ($action === 'start') {
         $url = trim($_POST['url'] ?? '');
-        $total = (int)($_POST['total_requests'] ?? 50);
-        $delay = (int)($_POST['delay_ms'] ?? 2000);
+        $total = (int)($_POST['total_requests'] ?? 500);
+        $delay = (int)($_POST['delay_ms'] ?? 50); // Default sangat cepat (50ms)
         
         $proxy = trim($_POST['proxy'] ?? '');
         $proxyUser = trim($_POST['proxy_user'] ?? '');
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Batas aman backend (Max 500 Request & Max 2000 ms Delay)
         $total = max(1, min($total, 500));
-        $delay = max(100, min($delay, 2000));
+        $delay = max(0, min($delay, 2000));
 
         $_SESSION['test'] = [
             'url' => $url,
@@ -302,8 +302,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statusMessage = "HTTP Code {$httpCode}";
         }
 
+        // Cek apakah sudah mencapai kelipatan 500 atau target total
+        $isBatchComplete = ($test['completed'] % 500 === 0);
         if ($test['completed'] >= $test['total']) {
             $test['status'] = 'finished';
+        } elseif ($isBatchComplete) {
+            $test['status'] = 'cooldown_batch'; // Status khusus saat mencapai batas 500 request
         }
 
         $testData = $test;
@@ -316,7 +320,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'latency' => $latency,
             'status_type' => $statusType,
             'status_message' => $statusMessage,
-            'test' => $testData
+            'test' => $testData,
+            'is_batch_complete' => $isBatchComplete
         ]);
 
         exit;
@@ -338,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Web Load Tester (Mandatory Proxy & Cooldown)</title>
+<title>Web Load Tester (Fast Batch Cooldown)</title>
 
 <style>
 
@@ -718,7 +723,7 @@ button:disabled {
             <h1>Web Load Tester</h1>
 
             <p>
-                Proxy Wajib, Cooldown Delay, Max 500 Req & Max 2000 ms
+                Fast Requests, Cooldown tiap capai 500 Request (Max 500 Req, Max 2000 ms)
             </p>
         </div>
 
@@ -735,11 +740,11 @@ button:disabled {
         <div class="row">
             <div class="form-group">
                 <label>Total Request (Maks: 500)</label>
-                <input type="number" id="total" value="50" min="1" max="500" required>
+                <input type="number" id="total" value="500" min="1" max="500" required>
             </div>
             <div class="form-group">
-                <label>Delay / Cooldown (ms) (Maks: 2000)</label>
-                <input type="number" id="delay" value="2000" min="100" max="2000" required>
+                <label>Jeda Antar Request (ms) (Maks: 2000)</label>
+                <input type="number" id="delay" value="50" min="0" max="2000" required>
             </div>
         </div>
 
@@ -911,6 +916,8 @@ function updateUI(test) {
         statusText.style.color = '#fbbf24';
     } else if (test.status === 'stopped') {
         statusText.style.color = '#f87171';
+    } else if (test.status === 'cooldown_batch') {
+        statusText.style.color = '#38bdf8';
     } else {
         statusText.style.color = '#94a3b8';
     }
@@ -945,7 +952,7 @@ startBtn.addEventListener('click', async () => {
     }
 
     if (delay > 2000) {
-        alert('Maksimal Delay / Cooldown adalah 2000 ms (2 detik).');
+        alert('Maksimal Delay adalah 2000 ms (2 detik).');
         document.getElementById('delay').value = 2000;
         delay = 2000;
     }
@@ -977,7 +984,7 @@ startBtn.addEventListener('click', async () => {
         pauseBtn.innerText = '⏸ PAUSE';
 
         logBox.innerHTML = '';
-        log('Test dimulai dengan cooldown aman.');
+        log('Test dimulai dengan mode cepat secara beruntun.');
 
         runLoop();
 
@@ -1098,28 +1105,35 @@ async function runLoop() {
             return;
         }
 
+        // Jika mencapai kelipatan 500 request, lakukan cooldown batch sebelum lanjut
+        if (result.is_batch_complete) {
+            log('Mencapai 500 request, menjalankan cooldown batch...', 'warning');
+            let batchCooldownTime = Number(document.getElementById('delay').value) * 10; // Cooldown pending sementara (misal 5-10 detik atau sesuai settingan delay dikali faktor)
+            if (batchCooldownTime < 2000) batchCooldownTime = 2000; // Minimal cooldown 2 detik saat capai 500
+
+            let remainingTime = batchCooldownTime;
+            const intervalStep = 100;
+
+            const batchCooldownTimer = setInterval(() => {
+                if (!running || stopped || isPausedState) {
+                    clearInterval(batchCooldownTimer);
+                    return;
+                }
+
+                remainingTime -= intervalStep;
+                if (remainingTime > 0) {
+                    cooldownInfo.innerText = `Cooldown 500 Req (Tunggu ${(remainingTime / 1000).toFixed(1)}s)...`;
+                } else {
+                    clearInterval(batchCooldownTimer);
+                    cooldownInfo.innerText = 'Progress';
+                    setTimeout(runLoop, 10);
+                }
+            }, intervalStep);
+            return;
+        }
+
+        // Lanjut request berikutnya dengan sangat cepat tanpa jeda panjang jika belum menyentuh 500
         let delay = Number(document.getElementById('delay').value);
-        if (delay > 2000) delay = 2000;
-
-        // Tampilkan Hitung Mundur Cooldown (Cooldown Button / Text Indicator sebelum lanjut)
-        let remainingTime = delay;
-        const intervalStep = 100;
-
-        const cooldownTimer = setInterval(() => {
-            if (!running || stopped || isPausedState) {
-                clearInterval(cooldownTimer);
-                return;
-            }
-
-            remainingTime -= intervalStep;
-            if (remainingTime > 0) {
-                cooldownInfo.innerText = `Cooldown (Tunggu ${(remainingTime / 1000).toFixed(1)}s)...`;
-            } else {
-                clearInterval(cooldownTimer);
-                cooldownInfo.innerText = 'Progress';
-            }
-        }, intervalStep);
-
         setTimeout(runLoop, delay);
 
     } catch (error) {
