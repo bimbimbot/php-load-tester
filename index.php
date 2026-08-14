@@ -6,7 +6,7 @@
 // Mulai session untuk mencatat timestamp cooldown backend
 session_start();
 
-// Batasi eksekusi PHP maksimal 90 detik untuk mengakomodasi alur 50 request/menit
+// Batasi eksekusi PHP maksimal 90 detik untuk mengakomodasi alur 200 request/menit
 set_time_limit(90);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -33,10 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $url = trim($_POST['url'] ?? '');
     
-    // Validasi Min & Max untuk Total Request (1 - 50 Request per menit)
-    $total_requests = (int)($_POST['total_requests'] ?? 50);
+    // Validasi Min & Max untuk Total Request (1 - 200 Request per menit)
+    $total_requests = (int)($_POST['total_requests'] ?? 200);
     if ($total_requests < 1) $total_requests = 1;
-    if ($total_requests > 50) $total_requests = 50;
+    if ($total_requests > 200) $total_requests = 200;
     
     // Validasi Min & Max untuk Concurrent (1 - 10)
     $concurrent = (int)($_POST['concurrent'] ?? 2); 
@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $batches = array_chunk($ch_list, $concurrent);
     $total_batches = count($batches);
     
-    // Perhitungan jeda waktu antar-batch agar 50 request terbagi rata dalam durasi 60 detik (1 menit)
+    // Perhitungan jeda waktu antar-batch agar 200 request terbagi rata dalam durasi 60 detik (1 menit)
     $target_total_duration = 60.0; 
     $interval_per_batch = $target_total_duration / max(1, $total_batches);
 
@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         curl_multi_close($mh);
 
-        // Jeda waktu otomatis (pacing delay) antar-batch untuk menjaga ritme 50 req/menit
+        // Jeda waktu otomatis (pacing delay) antar-batch untuk menjaga ritme 200 req/menit
         if ($index < $total_batches - 1) {
             $elapsed_batch_time = microtime(true) - $batch_start;
             $sleep_time = $interval_per_batch - $elapsed_batch_time;
@@ -231,9 +231,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="form-group" style="display: flex; gap: 12px;">
             <div style="flex: 1;">
-                <label>Total Request (1 - 50)</label>
-                <input type="number" name="total_requests" value="50" min="1" max="50" required>
-                <span class="hint">Minimal 1, Maksimal 50 per menit</span>
+                <label>Total Request (1 - 200)</label>
+                <input type="number" name="total_requests" value="200" min="1" max="200" required>
+                <span class="hint">Minimal 1, Maksimal 200 per menit</span>
             </div>
             <div style="flex: 1;">
                 <label>Concurrent (1 - 10)</label>
