@@ -33,6 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $url = trim($_POST['url'] ?? '');
     
+    // Ambil data Referrer dan Origin dari input Frontend (Wajib diisi di frontend)
+    $custom_referrer = trim($_POST['referrer'] ?? '');
+    $custom_origin   = trim($_POST['origin'] ?? '');
+
     // Validasi Min & Max untuk Total Request (1 - 200 Request per menit)
     $total_requests = (int)($_POST['total_requests'] ?? 200);
     if ($total_requests < 1) $total_requests = 1;
@@ -71,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ch_list = [];
 
     // Header Penyamaran Browser (Layer 7 HTTP Simulation)
+    // Referrer dan Origin dikosongkan dari backend, diambil sepenuhnya dari input user/frontend
     $human_headers = [
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -81,10 +86,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "Sec-Ch-Ua-Platform: \"Windows\"",
         "Sec-Fetch-Dest: document",
         "Sec-Fetch-Mode: navigate",
-        "Sec-Fetch-Site: none",
+        "Sec-Fetch-Site: cross-site",
         "Sec-Fetch-User: ?1",
         "Upgrade-Insecure-Requests: 1"
     ];
+
+    // Tambahkan Referer dan Origin dinamis jika diisi dari frontend
+    if (!empty($custom_referrer)) {
+        $human_headers[] = "Referer: " . $custom_referrer;
+    }
+    if (!empty($custom_origin)) {
+        $human_headers[] = "Origin: " . $custom_origin;
+    }
 
     $waktu_mulai = microtime(true);
 
@@ -227,6 +240,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-group">
             <label>URL Endpoint API</label>
             <input type="url" name="url" value="" placeholder="Masukkan URL Endpoint API" required>
+        </div>
+
+        <div class="form-group">
+            <label>Referrer (Wajib)</label>
+            <input type="url" name="referrer" placeholder="Contoh: https://website-kamu.com/" required>
+            <span class="hint">Wajib diisi URL Referrer yang sah.</span>
+        </div>
+
+        <div class="form-group">
+            <label>Origin (Wajib)</label>
+            <input type="text" name="origin" placeholder="Contoh: https://website-kamu.com" required>
+            <span class="hint">Wajib diisi Origin yang sah.</span>
         </div>
         
         <div class="form-group" style="display: flex; gap: 12px;">
