@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     /*
-     * Eksekusi Multi-cURL Secara Serentak (Batch Paralel 25 Request Sekaligus)
+     * Eksekusi Multi-cURL Secara Serentak (Batch Paralel dengan Humanized Request)
      */
     if ($action === 'request_batch') {
         if (!isset($_SESSION['test'])) {
@@ -143,6 +143,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         ];
 
+        $headers = [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Cache-Control: no-cache',
+            'Connection: keep-alive'
+        ];
+
+        if (!empty($test['origin'])) {
+            $headers[] = 'Origin: ' . $test['origin'];
+        }
+        if (!empty($test['api_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $test['api_key'];
+        }
+        if (!empty($test['custom_header_key']) && !empty($test['custom_header_val'])) {
+            $headers[] = $test['custom_header_key'] . ': ' . $test['custom_header_val'];
+        }
+
+        /* --- HUMANIZED BATCH PROCESS --- */
+        $cookiePath = sys_get_temp_dir() . '/cookie_' . session_id() . '.txt';
+        
         for ($i = 0; $i < $batchSize; $i++) {
             $ch = curl_init();
             $randomUserAgent = $humanUserAgents[array_rand($humanUserAgents)];
@@ -151,49 +171,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 CURLOPT_URL => $test['url'],
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_CONNECTTIMEOUT => 5,
-                CURLOPT_TIMEOUT => 10,
+                CURLOPT_CONNECTTIMEOUT => 7,
+                CURLOPT_TIMEOUT => 15,
                 CURLOPT_HTTPGET => true,
                 CURLOPT_USERAGENT => $randomUserAgent,
                 CURLOPT_PROXY => $test['proxy'],
+                CURLOPT_COOKIEFILE => $cookiePath,
+                CURLOPT_COOKIEJAR => $cookiePath,
+                CURLOPT_HTTPHEADER => $headers
             ];
 
             if (!empty($test['proxy_user'])) {
                 $curlOptions[CURLOPT_PROXYUSERPWD] = $test['proxy_user'] . ':' . $test['proxy_pass'];
                 $curlOptions[CURLOPT_PROXYAUTH] = CURLAUTH_ANY;
             }
-
-            $headers = [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Cache-Control: no-cache',
-            ];
-
             if (!empty($test['referer'])) {
                 $curlOptions[CURLOPT_REFERER] = $test['referer'];
             }
-            if (!empty($test['origin'])) {
-                $headers[] = 'Origin: ' . $test['origin'];
-            }
-            if (!empty($test['api_key'])) {
-                $headers[] = 'Authorization: Bearer ' . $test['api_key'];
-            }
-            if (!empty($test['custom_header_key']) && !empty($test['custom_header_val'])) {
-                $headers[] = $test['custom_header_key'] . ': ' . $test['custom_header_val'];
-            }
-
-            $curlOptions[CURLOPT_HTTPHEADER] = $headers;
 
             curl_setopt_array($ch, $curlOptions);
             curl_multi_add_handle($mh, $ch);
             $channels[] = ['ch' => $ch, 'start_time' => microtime(true)];
         }
 
+        // --- JITTER (Mencegah deteksi pola mesin) ---
+        usleep(rand(100000, 500000)); 
+
         $runningActive = null;
         do {
             curl_multi_exec($mh, $runningActive);
             curl_multi_select($mh);
         } while ($runningActive > 0);
+        /* --- END OF HUMANIZED BATCH --- */
 
         $batchResults = [];
 
@@ -282,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7 Layer - Concurrent 25</title>
+<title>7 Layer - Concurrent 15 (Humanized)</title>
 <style>
 :root {
     --bg: #080b12;
@@ -362,8 +371,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <div class="header">
         <div class="icon">🚀</div>
         <div>
-            <h1>7 Layer (Concurrent 25)</h1>
-            <p>Kirim request 7 Layer dengan batch 25 paralel.</p>
+            <h1>7 Layer (Concurrent 15 - Humanized)</h1>
+            <p>Kirim request 7 Layer dengan batch paralel dan teknik human-like.</p>
         </div>
     </div>
 
