@@ -1,25 +1,25 @@
 <?php
 // ==========================================
-// BAGIAN BACKEND (LAYER 7 API)
+// BAGIAN BACKEND (LAYER 7 API - RATE LIMITED)
 // ==========================================
 
-// Batasi eksekusi PHP maksimal 30 detik agar tidak menggantung/overload
-set_time_limit(30);
+// Batasi eksekusi PHP maksimal 90 detik untuk mengakomodasi alur 50 request/menit
+set_time_limit(90);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     
     $url = trim($_POST['url'] ?? '');
     
-    // Validasi Min & Max untuk Total Request (1 - 100)
-    $total_requests = (int)($_POST['total_requests'] ?? 10);
+    // Validasi Min & Max untuk Total Request (1 - 50 Request per menit)
+    $total_requests = (int)($_POST['total_requests'] ?? 50);
     if ($total_requests < 1) $total_requests = 1;
-    if ($total_requests > 100) $total_requests = 100;
+    if ($total_requests > 50) $total_requests = 50;
     
-    // Validasi Min & Max untuk Concurrent (1 - 20)
+    // Validasi Min & Max untuk Concurrent (1 - 10)
     $concurrent = (int)($_POST['concurrent'] ?? 2); 
     if ($concurrent < 1) $concurrent = 1;
-    if ($concurrent > 20) $concurrent = 20;
+    if ($concurrent > 10) $concurrent = 10;
 
     // Konfigurasi Proxy (Proxy Wajib, Auth Opsional)
     $proxy = trim($_POST['proxy'] ?? '');
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $proxy_error_messages = [];
     $ch_list = [];
 
-    // Header Penyamaran Browser (Layer 7 HTTP Flood Simulation)
+    // Header Penyamaran Browser (Layer 7 HTTP Simulation)
     $human_headers = [
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -95,13 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $batches = array_chunk($ch_list, $concurrent);
+    $total_batches = count($batches);
+    
+    // Perhitungan jeda waktu antar-batch agar 50 request terbagi rata dalam durasi 60 detik (1 menit)
+    $target_total_duration = 60.0; 
+    $interval_per_batch = $target_total_duration / max(1, $total_batches);
 
-    foreach ($batches as $batch) {
-        // Hentikan proses jika total waktu sudah mendekati 30 detik
-        if ((microtime(true) - $waktu_mulai) >= 28.5) {
-            $proxy_error_messages[] = "Pengujian dihentikan otomatis karena mencapai batas maksimal 30 detik.";
-            break;
-        }
+    foreach ($batches as $index => $batch) {
+        $batch_start = microtime(true);
 
         $mh = curl_multi_init();
         foreach ($batch as $ch) { curl_multi_add_handle($mh, $ch); }
@@ -110,11 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         do {
             curl_multi_exec($mh, $running);
             curl_multi_select($mh, 0.1);
-            
-            // Cek timeout di dalam loop cURL
-            if ((microtime(true) - $waktu_mulai) >= 29) {
-                break;
-            }
         } while ($running > 0);
 
         foreach ($batch as $ch) {
@@ -145,6 +141,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             curl_close($ch);
         }
         curl_multi_close($mh);
+
+        // Jeda waktu otomatis (pacing delay) antar-batch untuk menjaga ritme 50 req/menit
+        if ($index < $total_batches - 1) {
+            $elapsed_batch_time = microtime(true) - $batch_start;
+            $sleep_time = $interval_per_batch - $elapsed_batch_time;
+            if ($sleep_time > 0) {
+                usleep((int)($sleep_time * 1000000));
+            }
+        }
     }
 
     $waktu_selesai = microtime(true);
@@ -204,14 +209,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="form-group" style="display: flex; gap: 12px;">
             <div style="flex: 1;">
-                <label>Total Request (1 - 100)</label>
-                <input type="number" name="total_requests" value="10" min="1" max="100" required>
-                <span class="hint">Minimal 1, Maksimal 100</span>
+                <label>Total Request (1 - 50)</label>
+                <input type="number" name="total_requests" value="50" min="1" max="50" required>
+                <span class="hint">Minimal 1, Maksimal 50 per menit</span>
             </div>
             <div style="flex: 1;">
-                <label>Concurrent (1 - 20)</label>
-                <input type="number" name="concurrent" value="2" min="1" max="20" required>
-                <span class="hint">Minimal 1, Maksimal 20</span>
+                <label>Concurrent (1 - 10)</label>
+                <input type="number" name="concurrent" value="2" min="1" max="10" required>
+                <span class="hint">Jumlah paralel request per-batch</span>
             </div>
         </div>
         
@@ -256,7 +261,7 @@ document.getElementById('testerForm').addEventListener('submit', async function(
     
     // Ubah status tombol & sembunyikan hasil sebelumnya
     btn.disabled = true; 
-    btn.innerText = "⏳ Sedang Menembak Layer 7 (Max 30s)..."; 
+    btn.innerText = "⏳ Sedang Menembak Layer 7 (Proses ~1 Menit)..."; 
     resultBox.style.display = 'none';
     alertProxy.style.display = 'none';
 
@@ -273,7 +278,7 @@ document.getElementById('testerForm').addEventListener('submit', async function(
             document.getElementById('resProxyErr').innerText = json.data.proxy_error;
             document.getElementById('resLainnya').innerText = json.data.lainnya;
             
-            document.getElementById('resWaktu').innerText = json.waktu_eksekusi + " detik (Maks 30s)";
+            document.getElementById('resWaktu').innerText = json.waktu_eksekusi + " detik";
             
             // Tampilkan info jika ada pesan error dari Proxy
             if (json.proxy_note && json.proxy_note !== "") {
@@ -284,7 +289,7 @@ document.getElementById('testerForm').addEventListener('submit', async function(
             resultBox.style.display = 'block';
         }
     } catch (err) { 
-        alert("⚠️ Error Jaringan atau Timeout (>30s): " + err.message); 
+        alert("⚠️ Error Jaringan atau Timeout: " + err.message); 
     } finally { 
         btn.disabled = false; 
         btn.innerText = "Tembak Layer 7!"; 
