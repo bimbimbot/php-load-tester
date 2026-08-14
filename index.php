@@ -198,8 +198,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h2>🔥 Layer 7 API Load Tester</h2>
     <form id="testerForm">
         <div class="form-group">
-            <label>URL Endpoint API Kamu (InfinityFree)</label>
-            <input type="url" name="url" value="https://gokil.free.nf/api.php" placeholder="https://domain-kamu.free.nf/api.php" required>
+            <label>URL Endpoint API</label>
+            <input type="url" name="url" value="" placeholder="Masukkan URL Endpoint API" required>
         </div>
         
         <div class="form-group" style="display: flex; gap: 12px;">
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-group">
             <label>Proxy (Wajib) - IP:Port</label>
             <input type="text" name="proxy" placeholder="Contoh: 45.38.107.97:6014" required>
-            <span class="hint">Wajib diisi IP:Port Proxy aktif untuk pengujian Layer 7.</span>
+            <span class="hint">Wajib diisi IP:Port Proxy aktif.</span>
         </div>
         
         <div class="form-group">
