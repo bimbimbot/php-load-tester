@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================================
- * SAFE WEB LOAD TESTER (MANDATORY PROXY, MULTI-CURL CONCURRENT 25)
+ * SAFE WEB LOAD TESTER (MANDATORY PROXY, MULTI-CURL CONCURRENT 100)
  * ============================================================
  */
 
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $total = max(1, min($total, 500));
+        $total = max(1, min($total, 2000));
 
         $_SESSION['test'] = [
             'url' => $url,
@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     /*
-     * Eksekusi Multi-cURL Secara Serentak (Batch Paralel)
+     * Eksekusi Multi-cURL Secara Serentak (Batch Paralel 100 Request Sekaligus)
      */
     if ($action === 'request_batch') {
         if (!isset($_SESSION['test'])) {
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $remaining = $test['total'] - $test['completed'];
-        $batchSize = min(25, $remaining); // 25 request jalan bersamaan per kirim
+        $batchSize = min(100, $remaining); // Ditingkatkan menjadi 100 request sekaligus per batch agar jauh lebih cepat (instan)
 
         $mh = curl_multi_init();
         $channels = [];
@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7 Layer</title>
+<title>Super Fast Multi-Request Load Tester</title>
 <style>
 :root {
     --bg: #080b12;
@@ -348,8 +348,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <div class="header">
         <div class="icon">🚀</div>
         <div>
-            <h1>7 Layer</h1>
-            <p>Kirim request 7 Layer.</p>
+            <h1>Super Fast Multi-Request Tester</h1>
+            <p>Kirim request secara paralel 100 sekaligus (dretttt) menggunakan proxy wajib.</p>
         </div>
     </div>
 
@@ -360,8 +360,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         </div>
 
         <div class="form-group">
-            <label>Total Request (Maks: 500)</label>
-            <input type="number" id="total" value="500" min="1" max="500" required>
+            <label>Total Request (Maks: 2000)</label>
+            <input type="number" id="total" value="500" min="1" max="2000" required>
         </div>
 
         <div class="form-group">
@@ -492,7 +492,7 @@ startBtn.addEventListener('click', async () => {
         alert('URL dan Proxy wajib diisi!');
         return;
     }
-    if (total > 500) total = 500;
+    if (total > 2000) total = 2000;
 
     const result = await post('start', { url, total_requests: total, proxy, proxy_user: proxyUser, proxy_pass: proxyPass, referer, origin });
     if (!result.ok) { alert(result.error); return; }
@@ -505,7 +505,7 @@ startBtn.addEventListener('click', async () => {
     stopBtn.disabled = false;
 
     logBox.innerHTML = '';
-    log('Test super cepat dimulai secara paralel...');
+    log('Test super cepat 100 paralel dimulai...');
     runBatchLoop();
 });
 
@@ -570,8 +570,8 @@ async function runBatchLoop() {
             return;
         }
 
-        // Lanjut batch berikutnya secara instan
-        setTimeout(runBatchLoop, 30);
+        // Eksekusi batch berikutnya tanpa jeda (0ms) agar jauh lebih instan
+        setTimeout(runBatchLoop, 0);
 
     } catch (err) {
         log('Network error: ' + err.message, 'error');
