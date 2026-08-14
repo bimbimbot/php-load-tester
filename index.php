@@ -3,12 +3,34 @@
 // BAGIAN BACKEND (LAYER 7 API - RATE LIMITED)
 // ==========================================
 
+// Mulai session untuk mencatat timestamp cooldown backend
+session_start();
+
 // Batasi eksekusi PHP maksimal 90 detik untuk mengakomodasi alur 50 request/menit
 set_time_limit(90);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     
+    // --- SECURITY CHECK: COOLDOWN DI SISI BACKEND (15 DETIK) ---
+    $cooldown_limit = 15; // Waktu jeda minimal dalam detik
+    $current_time = time();
+
+    if (isset($_SESSION['last_submit_time'])) {
+        $time_passed = $current_time - $_SESSION['last_submit_time'];
+        if ($time_passed < $cooldown_limit) {
+            $sisa_waktu = $cooldown_limit - $time_passed;
+            echo json_encode([
+                'error' => "Harap tunggu {$sisa_waktu} detik lagi sebelum mengirim request kembali (Backend Protection)."
+            ]);
+            exit;
+        }
+    }
+
+    // Catat waktu request berhasil diproses
+    $_SESSION['last_submit_time'] = $current_time;
+    // -----------------------------------------------------------
+
     $url = trim($_POST['url'] ?? '');
     
     // Validasi Min & Max untuk Total Request (1 - 50 Request per menit)
@@ -291,8 +313,23 @@ document.getElementById('testerForm').addEventListener('submit', async function(
     } catch (err) { 
         alert("⚠️ Error Jaringan atau Timeout: " + err.message); 
     } finally { 
-        btn.disabled = false; 
-        btn.innerText = "Tembak Layer 7!"; 
+        // -------------------------------------------------------------
+        // COOLDOWN TIMEOUT FRONTEND (15 DETIK)
+        // -------------------------------------------------------------
+        let cooldownSec = 15;
+        
+        btn.disabled = true;
+        
+        const countdownInterval = setInterval(() => {
+            btn.innerText = `⏳ Harap tunggu cooldown (${cooldownSec}s)...`;
+            cooldownSec--;
+            
+            if (cooldownSec < 0) {
+                clearInterval(countdownInterval);
+                btn.disabled = false; 
+                btn.innerText = "Tembak Layer 7!"; 
+            }
+        }, 1000);
     }
 });
 </script>
