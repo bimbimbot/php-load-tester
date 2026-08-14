@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================================
- * SAFE WEB LOAD TESTER (MANDATORY PROXY, MULTI-CURL CONCURRENT 25)
+ * SAFE WEB LOAD TESTER (MANDATORY PROXY, MULTI-CURL CONCURRENT 15)
  * ============================================================
  */
 
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $remaining = $test['total'] - $test['completed'];
-        $batchSize = min(25, $remaining);
+        $batchSize = min(15, $remaining);
 
         $mh = curl_multi_init();
         $channels = [];
@@ -452,7 +452,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         <div class="stat"><div class="stat-title">Server Error (5xx)</div><div class="stat-value error" id="resServer">0</div></div>
     </div>
 
-    <div class="log" id="log">Tester siap digunakan (25 paralel)...</div>
+    <div class="log" id="log">Siap digunakan...</div>
 </div>
 
 <script>
@@ -549,7 +549,7 @@ startBtn.addEventListener('click', async () => {
     stopBtn.disabled = false;
 
     logBox.innerHTML = '';
-    log('Test 25 paralel dimulai...');
+    log('Paralel dimulai...');
     runBatchLoop();
 });
 
