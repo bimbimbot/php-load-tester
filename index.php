@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Super Fast Multi-Request Load Tester</title>
+<title>7 Layer</title>
 <style>
 :root {
     --bg: #080b12;
@@ -348,8 +348,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <div class="header">
         <div class="icon">🚀</div>
         <div>
-            <h1>Super Fast Multi-Request Tester</h1>
-            <p>Kirim request secara paralel 100 sekaligus (dretttt) menggunakan proxy wajib.</p>
+            <h1>7 Layer</h1>
+            <p>Kirim request 7 Layer.</p>
         </div>
     </div>
 
