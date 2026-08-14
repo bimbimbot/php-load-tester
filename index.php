@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================================
- * SAFE WEB LOAD TESTER (WITH PROXY, HEADERS, & HUMAN USER-AGENT)
+ * SAFE WEB LOAD TESTER (MANDATORY PROXY, COOLDOWN, MAX 500 REQ, MAX 2000 MS)
  * START / PAUSE / RESUME / STOP
  * ============================================================
  *
@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'start') {
         $url = trim($_POST['url'] ?? '');
         $total = (int)($_POST['total_requests'] ?? 50);
-        $delay = (int)($_POST['delay_ms'] ?? 250);
+        $delay = (int)($_POST['delay_ms'] ?? 2000);
         
         $proxy = trim($_POST['proxy'] ?? '');
         $proxyUser = trim($_POST['proxy_user'] ?? '');
@@ -37,9 +37,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // Batas aman untuk browser/PHP tester sederhana.
-        $total = max(1, min($total, 200));
-        $delay = max(100, min($delay, 5000));
+        // Validasi Wajib Proxy
+        if (empty($proxy)) {
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Proxy wajib diisi! Harap masukkan IP:PORT proxy.'
+            ]);
+            exit;
+        }
+
+        // Batas aman backend (Max 500 Request & Max 2000 ms Delay)
+        $total = max(1, min($total, 500));
+        $delay = max(100, min($delay, 2000));
 
         $_SESSION['test'] = [
             'url' => $url,
@@ -54,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'success' => 0,
             'client_error' => 0,
             'server_error' => 0,
+            'rate_limited' => 0,
+            'proxy_failed' => 0,
             'other' => 0,
             'status' => 'running',
             'started_at' => microtime(true),
@@ -187,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $ch = curl_init();
 
-        // Kumpulan User-Agent Browser Manusia (Chrome, Firefox, Safari, Edge)
+        // Kumpulan User-Agent Browser Manusia
         $humanUserAgents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',
@@ -208,12 +219,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             CURLOPT_USERAGENT => $randomUserAgent,
         ];
 
-        // Konfigurasi Proxy jika diisi
-        if (!empty($test['proxy'])) {
-            $curlOptions[CURLOPT_PROXY] = $test['proxy'];
-            if (!empty($test['proxy_user'])) {
-                $curlOptions[CURLOPT_PROXYUSERPWD] = $test['proxy_user'] . ':' . $test['proxy_pass'];
-            }
+        // Konfigurasi Proxy Wajib
+        $curlOptions[CURLOPT_PROXY] = $test['proxy'];
+        if (!empty($test['proxy_user'])) {
+            $curlOptions[CURLOPT_PROXYUSERPWD] = $test['proxy_user'] . ':' . $test['proxy_pass'];
         }
 
         // Header Kustom Manusiawi
@@ -247,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_exec($ch);
 
         $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErrNo = curl_errno($ch);
         $curlError = curl_error($ch);
 
         curl_close($ch);
@@ -257,17 +267,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         $test['completed']++;
+        $statusType = 'other';
+        $statusMessage = '';
 
-        if ($curlError) {
-            $test['other']++;
-        } elseif ($httpCode >= 200 && $httpCode < 300) {
+        // Deteksi Proxy Mati / Masalah Koneksi Proxy
+        $isProxyError = false;
+        if ($curlErrNo == 7 || $curlErrNo == 5 || $curlErrNo == 6 || $curlErrNo == 28 || strpos(strtolower($curlError), 'proxy') !== false) {
+            $isProxyError = true;
+        }
+
+        if ($isProxyError || ($curlErrNo !== 0 && $httpCode === 0)) {
+            $test['proxy_failed']++;
+            $statusType = 'proxy_failed';
+            $statusMessage = "Proxy Mati / Gagal Terhubung: " . ($curlError ?: "Network Error (Errno: $curlErrNo)");
+        } elseif ($httpCode === 200) {
             $test['success']++;
+            $statusType = 'success';
+            $statusMessage = "OK 200";
+        } elseif ($httpCode === 429) {
+            $test['rate_limited']++;
+            $statusType = 'rate_limited';
+            $statusMessage = "Rate Limited 429 (Terlalu Banyak Request)";
         } elseif ($httpCode >= 400 && $httpCode < 500) {
             $test['client_error']++;
+            $statusType = 'client_error';
+            $statusMessage = "Client Error {$httpCode}";
         } elseif ($httpCode >= 500) {
             $test['server_error']++;
+            $statusType = 'server_error';
+            $statusMessage = "Server Error {$httpCode}";
         } else {
             $test['other']++;
+            $statusType = 'other';
+            $statusMessage = "HTTP Code {$httpCode}";
         }
 
         if ($test['completed'] >= $test['total']) {
@@ -282,6 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'status' => $testData['status'],
             'http_code' => $httpCode,
             'latency' => $latency,
+            'status_type' => $statusType,
+            'status_message' => $statusMessage,
             'test' => $testData
         ]);
 
@@ -304,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Web Load Tester + Human User-Agent</title>
+<title>Web Load Tester (Mandatory Proxy & Cooldown)</title>
 
 <style>
 
@@ -319,6 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     --success: #34d399;
     --danger: #f87171;
     --warning: #fbbf24;
+    --info: #38bdf8;
 }
 
 * {
@@ -360,7 +395,7 @@ body {
 
 .container {
     width: 100%;
-    max-width: 650px;
+    max-width: 700px;
 
     background: var(--card);
 
@@ -577,7 +612,7 @@ button:disabled {
     display: grid;
 
     grid-template-columns:
-        repeat(2, 1fr);
+        repeat(3, 1fr);
 
     gap: 10px;
 }
@@ -601,7 +636,7 @@ button:disabled {
 }
 
 .stat-value {
-    font-size: 20px;
+    font-size: 18px;
 
     font-weight: 800;
 }
@@ -618,6 +653,10 @@ button:disabled {
     color: var(--warning);
 }
 
+.info {
+    color: var(--info);
+}
+
 .log {
     margin-top: 20px;
 
@@ -629,7 +668,7 @@ button:disabled {
 
     padding: 13px;
 
-    height: 130px;
+    height: 150px;
 
     overflow-y: auto;
 
@@ -656,6 +695,10 @@ button:disabled {
         grid-template-columns: 1fr;
     }
 
+    .stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
 }
 
 </style>
@@ -675,7 +718,7 @@ button:disabled {
             <h1>Web Load Tester</h1>
 
             <p>
-                Controlled testing + Human UA, Proxy & Headers
+                Proxy Wajib, Cooldown Delay, Max 500 Req & Max 2000 ms
             </p>
         </div>
 
@@ -691,18 +734,19 @@ button:disabled {
 
         <div class="row">
             <div class="form-group">
-                <label>Total Request</label>
-                <input type="number" id="total" value="50" min="1" max="200" required>
+                <label>Total Request (Maks: 500)</label>
+                <input type="number" id="total" value="50" min="1" max="500" required>
             </div>
             <div class="form-group">
-                <label>Delay (ms)</label>
-                <input type="number" id="delay" value="250" min="100" max="5000" required>
+                <label>Delay / Cooldown (ms) (Maks: 2000)</label>
+                <input type="number" id="delay" value="2000" min="100" max="2000" required>
             </div>
         </div>
 
+        <!-- Proxy Wajib -->
         <div class="form-group">
-            <label>Proxy (Opsional - Cth: 123.45.67.89:8080)</label>
-            <input type="text" id="proxy" placeholder="IP:PORT atau host:port">
+            <label>Proxy **(Wajib)** - Cth: 123.45.67.89:8080</label>
+            <input type="text" id="proxy" placeholder="IP:PORT atau host:port" required>
         </div>
 
         <div class="row">
@@ -744,7 +788,7 @@ button:disabled {
 
     <div class="progress-wrap">
         <div class="progress-info">
-            <span>Progress</span>
+            <span id="cooldownInfo">Progress</span>
             <span id="progressText">0 / 0</span>
         </div>
         <div class="progress">
@@ -759,15 +803,23 @@ button:disabled {
             <div class="stat-value" id="resTotal">0</div>
         </div>
         <div class="stat">
-            <div class="stat-title">Success 2xx</div>
+            <div class="stat-title">Success (200)</div>
             <div class="stat-value success" id="resSuccess">0</div>
         </div>
         <div class="stat">
-            <div class="stat-title">Client Error 4xx</div>
+            <div class="stat-title">Rate Limited (429)</div>
+            <div class="stat-value warning" id="resRateLimited">0</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Proxy Mati / Gagal</div>
+            <div class="stat-value error" id="resProxyFailed">0</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Client Error (4xx)</div>
             <div class="stat-value warning" id="resClient">0</div>
         </div>
         <div class="stat">
-            <div class="stat-title">Server Error 5xx</div>
+            <div class="stat-title">Server Error (5xx)</div>
             <div class="stat-value error" id="resServer">0</div>
         </div>
     </div>
@@ -787,9 +839,12 @@ const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
 const statusText = document.getElementById('statusText');
 const progressText = document.getElementById('progressText');
+const cooldownInfo = document.getElementById('cooldownInfo');
 const progressBar = document.getElementById('progressBar');
 const resTotal = document.getElementById('resTotal');
 const resSuccess = document.getElementById('resSuccess');
+const resRateLimited = document.getElementById('resRateLimited');
+const resProxyFailed = document.getElementById('resProxyFailed');
 const resClient = document.getElementById('resClient');
 const resServer = document.getElementById('resServer');
 const logBox = document.getElementById('log');
@@ -820,9 +875,15 @@ async function post(action, data = {}) {
 }
 
 
-function log(message) {
+function log(message, type = 'normal') {
     const time = new Date().toLocaleTimeString();
-    logBox.innerHTML += `<div>[${time}] ${message}</div>`;
+    let colorStyle = '#a7f3d0';
+
+    if (type === 'success') colorStyle = '#34d399';
+    else if (type === 'warning') colorStyle = '#fbbf24';
+    else if (type === 'error') colorStyle = '#f87171';
+
+    logBox.innerHTML += `<div style="color: ${colorStyle}">[${time}] ${message}</div>`;
     logBox.scrollTop = logBox.scrollHeight;
 }
 
@@ -838,6 +899,8 @@ function updateUI(test) {
     progressText.innerText = `${completed} / ${total}`;
     resTotal.innerText = completed;
     resSuccess.innerText = test.success;
+    resRateLimited.innerText = test.rate_limited;
+    resProxyFailed.innerText = test.proxy_failed;
     resClient.innerText = test.client_error;
     resServer.innerText = test.server_error;
     statusText.innerText = String(test.status).toUpperCase();
@@ -855,9 +918,9 @@ function updateUI(test) {
 
 
 startBtn.addEventListener('click', async () => {
+    let total = parseInt(document.getElementById('total').value);
+    let delay = parseInt(document.getElementById('delay').value);
     const url = document.getElementById('url').value.trim();
-    const total = document.getElementById('total').value;
-    const delay = document.getElementById('delay').value;
     const proxy = document.getElementById('proxy').value.trim();
     const proxyUser = document.getElementById('proxyUser').value.trim();
     const proxyPass = document.getElementById('proxyPass').value.trim();
@@ -867,6 +930,24 @@ startBtn.addEventListener('click', async () => {
     if (!url) {
         alert('Masukkan URL endpoint.');
         return;
+    }
+
+    if (!proxy) {
+        alert('Proxy wajib diisi!');
+        return;
+    }
+
+    // Validasi Front-end Maksimal Request & Delay (ms)
+    if (total > 500) {
+        alert('Maksimal Total Request adalah 500.');
+        document.getElementById('total').value = 500;
+        total = 500;
+    }
+
+    if (delay > 2000) {
+        alert('Maksimal Delay / Cooldown adalah 2000 ms (2 detik).');
+        document.getElementById('delay').value = 2000;
+        delay = 2000;
     }
 
     try {
@@ -896,7 +977,7 @@ startBtn.addEventListener('click', async () => {
         pauseBtn.innerText = '⏸ PAUSE';
 
         logBox.innerHTML = '';
-        log('Test dimulai.');
+        log('Test dimulai dengan cooldown aman.');
 
         runLoop();
 
@@ -914,7 +995,7 @@ pauseBtn.addEventListener('click', async () => {
                 running = false;
                 isPausedState = true;
                 pauseBtn.innerText = '▶ RESUME';
-                log('Test dijeda.');
+                log('Test dijeda.', 'warning');
                 updateUI(result.test);
             }
         } else {
@@ -929,7 +1010,7 @@ pauseBtn.addEventListener('click', async () => {
             }
         }
     } catch (error) {
-        log('Toggle Pause/Resume error: ' + error.message);
+        log('Toggle Pause/Resume error: ' + error.message, 'error');
     }
 });
 
@@ -942,10 +1023,10 @@ stopBtn.addEventListener('click', async () => {
         const result = await post('stop');
         if (result.ok) {
             updateUI(result.test);
-            log('Test dihentikan.');
+            log('Test dihentikan.', 'error');
         }
     } catch (error) {
-        log('Stop error: ' + error.message);
+        log('Stop error: ' + error.message, 'error');
     }
 
     startBtn.disabled = false;
@@ -953,6 +1034,7 @@ stopBtn.addEventListener('click', async () => {
     stopBtn.disabled = true;
     pauseBtn.innerText = '⏸ PAUSE';
     isPausedState = false;
+    cooldownInfo.innerText = 'Progress';
 });
 
 
@@ -965,7 +1047,7 @@ async function runLoop() {
         const result = await post('request');
 
         if (!result.ok) {
-            log('Request error: ' + result.error);
+            log('Request error: ' + result.error, 'error');
             running = false;
             return;
         }
@@ -977,15 +1059,15 @@ async function runLoop() {
 
         updateUI(result.test);
 
-        if (result.http_code) {
-            log(
-                `Request #${result.test.completed} → ` +
-                `${result.http_code} ` +
-                `(${result.latency} ms)`
-            );
-        } else {
-            log(`Request #${result.test.completed} → network error`);
-        }
+        let logType = 'normal';
+        if (result.status_type === 'success') logType = 'success';
+        else if (result.status_type === 'rate_limited' || result.status_type === 'client_error') logType = 'warning';
+        else if (result.status_type === 'proxy_failed' || result.status_type === 'server_error') logType = 'error';
+
+        log(
+            `Request #${result.test.completed} → [${result.status_message}] (${result.latency} ms)`,
+            logType
+        );
 
         if (result.status === 'finished') {
             running = false;
@@ -994,7 +1076,8 @@ async function runLoop() {
             stopBtn.disabled = true;
             pauseBtn.innerText = '⏸ PAUSE';
             isPausedState = false;
-            log('Test selesai.');
+            cooldownInfo.innerText = 'Progress';
+            log('Test selesai.', 'success');
             return;
         }
 
@@ -1005,6 +1088,7 @@ async function runLoop() {
             stopBtn.disabled = true;
             pauseBtn.innerText = '⏸ PAUSE';
             isPausedState = false;
+            cooldownInfo.innerText = 'Progress';
             return;
         }
 
@@ -1014,15 +1098,37 @@ async function runLoop() {
             return;
         }
 
-        const delay = Number(document.getElementById('delay').value);
+        let delay = Number(document.getElementById('delay').value);
+        if (delay > 2000) delay = 2000;
+
+        // Tampilkan Hitung Mundur Cooldown (Cooldown Button / Text Indicator sebelum lanjut)
+        let remainingTime = delay;
+        const intervalStep = 100;
+
+        const cooldownTimer = setInterval(() => {
+            if (!running || stopped || isPausedState) {
+                clearInterval(cooldownTimer);
+                return;
+            }
+
+            remainingTime -= intervalStep;
+            if (remainingTime > 0) {
+                cooldownInfo.innerText = `Cooldown (Tunggu ${(remainingTime / 1000).toFixed(1)}s)...`;
+            } else {
+                clearInterval(cooldownTimer);
+                cooldownInfo.innerText = 'Progress';
+            }
+        }, intervalStep);
+
         setTimeout(runLoop, delay);
 
     } catch (error) {
-        log('Network error: ' + error.message);
+        log('Network error: ' + error.message, 'error');
         running = false;
         startBtn.disabled = false;
         pauseBtn.disabled = true;
         stopBtn.disabled = true;
+        cooldownInfo.innerText = 'Progress';
     }
 }
 
