@@ -6,8 +6,8 @@
 // Mulai session untuk mencatat timestamp cooldown backend
 session_start();
 
-// Batasi eksekusi PHP maksimal 180 detik untuk mengakomodasi alur 1000 request/menit
-set_time_limit(180);
+// Batasi eksekusi PHP maksimal 300 detik untuk mengakomodasi alur 5000 request/menit
+set_time_limit(300);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -37,15 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $custom_referrer = trim($_POST['referrer'] ?? '');
     $custom_origin   = trim($_POST['origin'] ?? '');
 
-    // Validasi Min & Max untuk Total Request (1 - 1000 Request per menit)
-    $total_requests = (int)($_POST['total_requests'] ?? 1000);
+    // Validasi Min & Max untuk Total Request (1 - 5000 Request per menit)
+    $total_requests = (int)($_POST['total_requests'] ?? 5000);
     if ($total_requests < 1) $total_requests = 1;
-    if ($total_requests > 1000) $total_requests = 1000;
+    if ($total_requests > 5000) $total_requests = 5000;
     
-    // Validasi Min & Max untuk Concurrent (1 - 50 agar sanggup handle 1000 request)
-    $concurrent = (int)($_POST['concurrent'] ?? 20); 
+    // Validasi Min & Max untuk Concurrent (1 - 100 agar sanggup handle 5000 request)
+    $concurrent = (int)($_POST['concurrent'] ?? 50); 
     if ($concurrent < 1) $concurrent = 1;
-    if ($concurrent > 50) $concurrent = 50;
+    if ($concurrent > 100) $concurrent = 100;
 
     // Konfigurasi Proxy (Proxy Wajib, Auth Opsional)
     $proxy = trim($_POST['proxy'] ?? '');
@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $batches = array_chunk($ch_list, $concurrent);
     $total_batches = count($batches);
     
-    // Perhitungan jeda waktu antar-batch agar 1000 request terbagi rata dalam durasi 60 detik (1 menit)
+    // Perhitungan jeda waktu antar-batch agar 5000 request terbagi rata dalam durasi 60 detik (1 menit)
     $target_total_duration = 60.0; 
     $interval_per_batch = $target_total_duration / max(1, $total_batches);
 
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $running = null;
         do {
             curl_multi_exec($mh, $running);
-            curl_multi_select($mh, 0.05);
+            curl_multi_select($mh, 0.01);
         } while ($running > 0);
 
         foreach ($batch as $ch) {
@@ -177,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         curl_multi_close($mh);
 
-        // Jeda waktu otomatis (pacing delay) antar-batch untuk menjaga ritme 1000 req/menit
+        // Jeda waktu otomatis (pacing delay) antar-batch untuk menjaga ritme 5000 req/menit
         if ($index < $total_batches - 1) {
             $elapsed_batch_time = microtime(true) - $batch_start;
             $sleep_time = $interval_per_batch - $elapsed_batch_time;
@@ -256,13 +256,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="form-group" style="display: flex; gap: 12px;">
             <div style="flex: 1;">
-                <label>Total Request (1 - 1000)</label>
-                <input type="number" name="total_requests" value="1000" min="1" max="1000" required>
-                <span class="hint">Minimal 1, Maksimal 1000 per menit</span>
+                <label>Total Request (1 - 5000)</label>
+                <input type="number" name="total_requests" value="5000" min="1" max="5000" required>
+                <span class="hint">Minimal 1, Maksimal 5000 per menit</span>
             </div>
             <div style="flex: 1;">
-                <label>Concurrent (1 - 50)</label>
-                <input type="number" name="concurrent" value="20" min="1" max="50" required>
+                <label>Concurrent (1 - 100)</label>
+                <input type="number" name="concurrent" value="50" min="1" max="100" required>
                 <span class="hint">Jumlah paralel request per-batch</span>
             </div>
         </div>
